@@ -139,10 +139,8 @@ class HotLinkBot(Thread):
         key_list = []
         val_list = []
         for key, val in zip(parse_dict.keys(), parse_dict.values()):
-            key = key.lower()
-            val = val.lower()
-            key_list.append(key)
-            val_list.append(val)
+            key_list.append(key.lower())
+            val_list.append(val.lower())
         parse_dict.clear()
         for key, val in zip(key_list, val_list):
             parse_dict.update({key: val})
