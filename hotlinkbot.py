@@ -19,7 +19,7 @@ summon_keyword = "!hotlinkbot"
 class HotLinkBot(Thread):
     def __init__(self):
         super().__init__()
-        self.successful_reply_header = "\nI managed to find the following links for you!\nc\n"
+        self.successful_reply_header = "\nI managed to find the following links for you!\n\n"
         self.reply_footer = "\n***\n^This ^bot ^is ^maintained ^by ^its ^creator ^u/apt-get-schwifty, " \
                             "^documentation ^for ^the ^bot ^can ^be ^found " \
                             "^[here](https://github.com/schwifty42069/hotlinkbot)"
