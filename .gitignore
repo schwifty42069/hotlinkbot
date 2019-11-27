@@ -4,3 +4,4 @@ unlock.sh
 unlock.txt.gpg
 hotlinkbot.iml
 config/config.properties
+log/botlog.json

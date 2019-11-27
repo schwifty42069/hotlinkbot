@@ -149,18 +149,7 @@ class WatchEpisodeApi(object):
                     if "#hola" in str(s) and "player" in str(s):
                         if str(s).split("sources: [{src: ")[1].split(",")[0].strip("\"") not in hotlinks:
                             hotlinks.append(str(s).split("sources: [{src: ")[1].split(",")[0].strip("\""))
-            elif "onlystream" in link:
-                bsoup = Soup(requests.get(link).text, 'html.parser')
-                for s in bsoup.findAll("script"):
-                    if "jwplayer.defaults" in str(s):
-                        if str(s).split("sources: [{file:")[1].split(",")[0].strip("\"") not in hotlinks:
-                            hotlinks.append(str(s).split("sources: [{file:")[1].split(",")[0].strip("\""))
-            elif "vidlox" in link:
-                bsoup = Soup(requests.get(link).text, 'html.parser')
-                for s in bsoup.findAll("script"):
-                    if "new Clappr.Player" in str(s):
-                        if str(s).split("sources: [")[1].split(",")[3].strip("\"").strip("\"]") not in hotlinks:
-                            hotlinks.append(str(s).split("sources: [")[1].split(",")[3].strip("\"").strip("\"]"))
+
                 bar.update(1)
 
             else:
