@@ -84,8 +84,8 @@ class HotLinkBot(Thread):
                 elements = comment.body.split("; ")
                 for e in elements:
                     if summon_keyword not in e:
-                        key = e.split("=")[0]
-                        val = e.split("=")[1].strip(";")
+                        key = e.split("=")[0].lower()
+                        val = e.split("=")[1].strip(";").lower()
                         parse_dict.update({key: val})
                 if parse_dict['media'] != "live":
                     parse_dict = self.parse_out_characters(parse_dict)
@@ -100,10 +100,11 @@ class HotLinkBot(Thread):
                         title_code = imdb_query.title_codes[0]
                         if parse_dict['media'] == 'tvod':
                             size = []
-                            for link in data[1]:
-                                site = urllib.request.urlopen(link)
-                                meta = site.info()
-                                size.append(int(int(meta._headers[3][1]) / 1024))
+                            if isinstance(data[1], list):
+                                for link in data[1]:
+                                    site = urllib.request.urlopen(link)
+                                    meta = site.info()
+                                    size.append(int(int(meta._headers[3][1]) / 1024))
                             if data[0] == 0:
                                 episode_titles = imdb_query.scrape_episode_titles(title_code, parse_dict['season'])
                                 if len(episode_titles) == 0:
@@ -151,22 +152,7 @@ class HotLinkBot(Thread):
                     parse_dict.update({"title": new_title})
             return parse_dict
 
-    @staticmethod
-    def drop_key_val_case(parse_dict):
-        # Making sure key/val pairs are lowercase
-        key_list = []
-        val_list = []
-        for key, val in zip(parse_dict.keys(), parse_dict.values()):
-            key_list.append(key.lower())
-            val_list.append(val.lower())
-        parse_dict.clear()
-        for key, val in zip(key_list, val_list):
-            parse_dict.update({key: val})
-        return parse_dict
-
     def parse_command_syntax(self, parse_dict, comment):
-        if parse_dict['media'] != "live":
-            parse_dict = self.drop_key_val_case(parse_dict)
         print("\nParse dict: {}\n".format(parse_dict))
         if parse_dict['media'] == "tvod" and "season" not in parse_dict.keys() or parse_dict['media'] == "tvod" and \
                 "episode" not in parse_dict.keys():
