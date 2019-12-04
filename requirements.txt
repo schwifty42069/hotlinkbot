@@ -1,5 +1,5 @@
-simplejson
+simplejson==3.13.2
 praw==6.4.0
 requests==2.22.0
-tqdm==4.38.0
+tqdm==4.40.0
 beautifulsoup4==4.8.1
