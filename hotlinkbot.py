@@ -86,11 +86,14 @@ class HotLinkBot(Thread):
         for comment in comments:
             if "!hotlinkbot" in comment.body:
                 id_list.append(comment.id)
+        print("\nPulled comment list:\n{}\n".format(id_list))
         if len(self.read_master_comment_log()['comment_ids']) != 0:
             master_log = self.read_master_comment_log()
-            for comment_id in master_log['comment_ids']:
-                if comment_id not in id_list:
+            for comment_id in id_list:
+                if comment_id not in master_log['comment_ids']:
                     missed_comment_ids.append(comment_id)
+                else:
+                    print("{} is in master list".format(comment_id))
         else:
             return id_list
 
