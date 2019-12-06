@@ -181,21 +181,27 @@ class HotLinkBot(Thread):
 
     def stream_comments(self):
         while True:
-            master_log = self.read_master_comment_log()
-            print("\nRead master log:\n{}\n".format(master_log))
-            missed_summons = self.check_for_missed_summons()
-            print("\nMissed summons:\n{}\n".format(missed_summons))
-            if len(master_log['comment_ids']) == 0:
-                master_log.update({"comment_ids": missed_summons})
-                self.write_master_comment_log(master_log)
-                missed_summons.clear()
+            try:
+                master_log = self.read_master_comment_log()
+                print("\nRead master log:\n{}\n".format(master_log))
+                missed_summons = self.check_for_missed_summons()
+                print("\nMissed summons:\n{}\n".format(missed_summons))
+                if len(master_log['comment_ids']) == 0:
+                    master_log.update({"comment_ids": missed_summons})
+                    self.write_master_comment_log(master_log)
+                    missed_summons.clear()
 
-            else:
-                if len(missed_summons) != 0:
-                    self.reply_to_missed_summons(missed_summons)
-                    for cid in missed_summons:
-                        master_log['comment_ids'].append(cid)
-                self.write_master_comment_log(master_log)
+                else:
+                    if len(missed_summons) != 0:
+                        self.reply_to_missed_summons(missed_summons)
+                        for cid in missed_summons:
+                            master_log['comment_ids'].append(cid)
+                    self.write_master_comment_log(master_log)
+            except prawcore.exceptions.RequestException:
+                print("\nNetwork exception occurred, waiting 10 seconds to retry..\n")
+                time.sleep(10)
+                continue
+
             try:
                 print("\nStreaming comments...\n")
                 for comment in self.reddit.subreddit(self.sub_name).stream.comments(skip_existing=True):

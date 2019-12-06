@@ -4,3 +4,4 @@ prawcore==1.0.1
 praw==6.4.0
 beautifulsoup4==4.8.1
 simplejson==3.17.0
+urllib3==1.25.7
