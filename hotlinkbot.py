@@ -106,7 +106,6 @@ class HotLinkBot(Thread):
 
     @staticmethod
     def write_master_comment_log(master_json):
-        print("\nwriting master comment log:\n{}\n".format(master_json))
         with open("log/comment_log.json", "w") as w:
             w.write(simplejson.dumps(master_json, indent=4, sort_keys=True))
             w.close()
@@ -124,7 +123,6 @@ class HotLinkBot(Thread):
     @staticmethod
     def build_parse_dict(comment):
         elements = comment.body.split("; ")
-        print("Elements: {}".format(elements))
         parse_dict = {}
         for e in elements:
             if summon_keyword not in e:
@@ -186,9 +184,7 @@ class HotLinkBot(Thread):
         while True:
             try:
                 master_log = self.read_master_comment_log()
-                print("\nRead master log:\n{}\n".format(master_log))
                 missed_summons = self.check_for_missed_summons()
-                print("\nMissed summons:\n{}\n".format(missed_summons))
                 if len(master_log['comment_ids']) == 0:
                     master_log.update({"comment_ids": missed_summons})
                     self.write_master_comment_log(master_log)
