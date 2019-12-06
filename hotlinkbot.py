@@ -123,7 +123,9 @@ class HotLinkBot(Thread):
 
     @staticmethod
     def build_parse_dict(comment):
-        elements = comment.body.split()
+        elements = comment.body.split("; ")
+        print("Elements: {}".format(elements))
+        parse_dict = {}
         for e in elements:
             if summon_keyword not in e:
                 key = e.split("=")[0].lower()
@@ -131,7 +133,8 @@ class HotLinkBot(Thread):
                     val = e.split("=")[1].strip(";").lower()
                 else:
                     val = e.split("=")[1].strip(";")
-                return {key: val}
+                parse_dict.update({key: val})
+        return parse_dict
 
     def scrape_metadata_and_reply(self, parse_dict, data, comment):
         if parse_dict['media'] != "live":
