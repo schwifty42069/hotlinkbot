@@ -8,6 +8,7 @@ import configparser
 import simplejson
 import os
 import time
+import prawcore.exceptions
 
 config = configparser.RawConfigParser()
 config.read("config/config.properties")
@@ -35,6 +36,7 @@ class HotLinkBot(Thread):
         self.livetv_reply_header = "\n| Channel | Link |\n|:--:|:--:|"
 
         self.sub_name = "hlsvillage"
+        self.submission_id = "duwfud"
         self.reply_entries = []
         self.channel_codes = ['ABC', 'AE', 'AMC', 'Animal', 'BBCAmerica', 'BET', 'Boomerang', 'Bravo', 'CN', 'CBS',
                               'CMT', 'CNBC', 'CNN', 'Comedy', 'DA', 'Discovery', 'Disney', 'DisneyJr', 'DisneyXD',
@@ -63,7 +65,7 @@ class HotLinkBot(Thread):
     def run(self):
         while True:
             try:
-                self.build_parse_dict()
+                self.stream_comments()
             except KeyboardInterrupt:
                 self.stop()
                 return
@@ -75,68 +77,141 @@ class HotLinkBot(Thread):
     def stopped(self):
         return self._stop_event.is_set()
 
-    def build_parse_dict(self):
-        print("\nStreaming comments...\n")
-        parse_dict = {}
-        for comment in self.reddit.subreddit(self.sub_name).stream.comments(skip_existing=True):
-            if summon_keyword in comment.body:
-                print("\nBot was summoned via comment!\n")
-                elements = comment.body.split("; ")
-                for e in elements:
-                    if summon_keyword not in e:
-                        key = e.split("=")[0].lower()
-                        val = e.split("=")[1].strip(";").lower()
-                        parse_dict.update({key: val})
-                if parse_dict['media'] != "live":
-                    parse_dict = self.parse_out_characters(parse_dict)
-                data = self.parse_command_syntax(parse_dict, comment)
-                if data is None:
-                    parse_dict.clear()
-                    continue
+    def check_for_missed_summons(self):
+        submission = self.reddit.submission(id=self.submission_id)
+        submission.comments.replace_more(limit=None)
+        comments = submission.comments.list()
+        id_list = []
+        missed_comment_ids = []
+        for comment in comments:
+            if "!hotlinkbot" in comment.body:
+                id_list.append(comment.id)
+        if len(self.read_master_comment_log()['comment_ids']) != 0:
+            master_log = self.read_master_comment_log()
+            for comment_id in master_log['comment_ids']:
+                if comment_id not in id_list:
+                    missed_comment_ids.append(comment_id)
+        else:
+            return id_list
+
+        return missed_comment_ids
+
+    @staticmethod
+    def read_master_comment_log():
+        if os.path.exists("log/comment_log.json"):
+            with open("log/comment_log.json", "r") as r:
+                return json.loads(r.read())
+        else:
+            return {"comment_ids": []}
+
+    @staticmethod
+    def write_master_comment_log(master_json):
+        print("\nwriting master comment log:\n{}\n".format(master_json))
+        with open("log/comment_log.json", "w") as w:
+            w.write(simplejson.dumps(master_json, indent=4, sort_keys=True))
+            w.close()
+            return
+
+    def reply_to_missed_summons(self, missed_ids_list):
+        print("\nReplying to missed summons!\n")
+        for cid in missed_ids_list:
+            comment = self.reddit.comment(id=cid)
+            parse_dict = self.build_parse_dict(comment)
+            data = self.parse_command_syntax(parse_dict, comment)
+            self.scrape_metadata_and_reply(parse_dict, data, comment)
+            return
+
+    @staticmethod
+    def build_parse_dict(comment):
+        elements = comment.body.split()
+        for e in elements:
+            if summon_keyword not in e:
+                key = e.split("=")[0].lower()
+                if "channel" not in e:
+                    val = e.split("=")[1].strip(";").lower()
                 else:
-                    if parse_dict['media'] != "live":
-                        imdb_query = ImdbQuery(parse_dict['title'])
-                        imdb_query.scrape_title_codes()
-                        title_code = imdb_query.title_codes[0]
-                        if parse_dict['media'] == 'tvod':
-                            size = []
-                            if isinstance(data[1], list):
-                                for link in data[1]:
-                                    site = urllib.request.urlopen(link)
-                                    meta = site.info()
-                                    size.append(int(int(meta._headers[3][1]) / 1024))
-                            if data[0] == 0:
-                                episode_titles = imdb_query.scrape_episode_titles(title_code, parse_dict['season'])
-                                if len(episode_titles) == 0:
-                                    episode_title = "?"
-                                else:
-                                    episode_title = episode_titles[int(parse_dict['episode']) - 1]
+                    val = e.split("=")[1].strip(";")
+                return {key: val}
 
-                                self.assemble_tvod_reply_entry(parse_dict['title'], parse_dict['season'], episode_title,
-                                                               data[1], size, 0)
-                                self.build_successful_reply(comment, parse_dict, link_type="dl")
-                            elif data[0] == 1:
-                                episode_title = imdb_query.scrape_episode_titles(title_code, parse_dict['season'])[int(
-                                    parse_dict['episode']) - 1]
-
-                                self.assemble_tvod_reply_entry(parse_dict['title'], parse_dict['season'], episode_title,
-                                                               data[1], size, 1)
-                                self.build_successful_reply(comment, parse_dict, link_type="hot")
-                        elif parse_dict['media'] == "movie":
-                            if data[0] == 0:
-                                self.assemble_movie_reply_entry(parse_dict['title'], data[1], 0)
-                                self.build_successful_reply(comment, parse_dict, link_type="dl")
-                            elif data[0] == 1:
-                                # noinspection PyTypeChecker
-                                self.assemble_movie_reply_entry(parse_dict['title'], data[1]['src'], 1,
-                                                                q=data[1]['quality'])
-                                self.build_successful_reply(comment, parse_dict, link_type="hot")
-
-                        parse_dict.clear()
+    def scrape_metadata_and_reply(self, parse_dict, data, comment):
+        if parse_dict['media'] != "live":
+            imdb_query = ImdbQuery(parse_dict['title'])
+            imdb_query.scrape_title_codes()
+            title_code = imdb_query.title_codes[0]
+            if parse_dict['media'] == 'tvod':
+                size = []
+                if isinstance(data[1], list):
+                    for link in data[1]:
+                        site = urllib.request.urlopen(link)
+                        meta = site.info()
+                        size.append(int(int(meta._headers[3][1]) / 1024))
+                if data[0] == 0:
+                    episode_titles = imdb_query.scrape_episode_titles(title_code, parse_dict['season'])
+                    if len(episode_titles) == 0:
+                        episode_title = "?"
                     else:
-                        self.assemble_livetv_reply(parse_dict['channel'], data)
-                        self.build_successful_reply(comment, parse_dict)
-                        parse_dict.clear()
+                        episode_title = episode_titles[int(parse_dict['episode']) - 1]
+
+                    self.assemble_tvod_reply_entry(parse_dict['title'], parse_dict['season'], episode_title,
+                                                   data[1], size, 0)
+                    self.build_successful_reply(comment, parse_dict, link_type="dl")
+                    return
+                elif data[0] == 1:
+                    episode_title = imdb_query.scrape_episode_titles(title_code, parse_dict['season'])[int(
+                        parse_dict['episode']) - 1]
+
+                    self.assemble_tvod_reply_entry(parse_dict['title'], parse_dict['season'], episode_title,
+                                                   data[1], size, 1)
+                    self.build_successful_reply(comment, parse_dict, link_type="hot")
+                    return
+            elif parse_dict['media'] == "movie":
+                if data[0] == 0:
+                    self.assemble_movie_reply_entry(parse_dict['title'], data[1], 0)
+                    self.build_successful_reply(comment, parse_dict, link_type="dl")
+                elif data[0] == 1:
+                    # noinspection PyTypeChecker
+                    self.assemble_movie_reply_entry(parse_dict['title'], data[1]['src'], 1,
+                                                    q=data[1]['quality'])
+                    self.build_successful_reply(comment, parse_dict, link_type="hot")
+                    return
+        else:
+            self.assemble_livetv_reply(parse_dict['channel'], data)
+            self.build_successful_reply(comment, parse_dict)
+            return
+
+    def stream_comments(self):
+        while True:
+            master_log = self.read_master_comment_log()
+            print("\nRead master log:\n{}\n".format(master_log))
+            missed_summons = self.check_for_missed_summons()
+            print("\nMissed summons:\n{}\n".format(missed_summons))
+            if len(master_log['comment_ids']) == 0:
+                master_log.update({"comment_ids": missed_summons})
+                self.write_master_comment_log(master_log)
+                missed_summons.clear()
+
+            else:
+                if len(missed_summons) != 0:
+                    self.reply_to_missed_summons(missed_summons)
+                    for cid in missed_summons:
+                        master_log['comment_ids'].append(cid)
+                self.write_master_comment_log(master_log)
+            try:
+                print("\nStreaming comments...\n")
+                for comment in self.reddit.subreddit(self.sub_name).stream.comments(skip_existing=True):
+                    if summon_keyword in comment.body:
+                        print("\nBot was summoned via comment!\n")
+                        parse_dict = self.build_parse_dict(comment)
+                        if parse_dict['media'] != "live":
+                            parse_dict = self.parse_out_characters(parse_dict)
+                        data = self.parse_command_syntax(parse_dict, comment)
+                        if data is None:
+                            self.reply_with_error(0, comment, parse_dict)
+                        else:
+                            self.scrape_metadata_and_reply(parse_dict, data, comment)
+            except prawcore.exceptions.RequestException:
+                print("\nNetwork exception occurred, waiting 10 seconds to retry..\n")
+                time.sleep(10)
 
     @staticmethod
     def parse_out_characters(parse_dict):
