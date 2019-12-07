@@ -106,18 +106,22 @@ class HotLinkBot(Thread):
 
     @staticmethod
     def write_master_comment_log(master_json):
+        print("\nUpdating master log...\n")
         with open("log/comment_log.json", "w") as w:
             w.write(simplejson.dumps(master_json, indent=4, sort_keys=True))
             w.close()
             return
 
-    def reply_to_missed_summons(self, missed_ids_list):
+    def reply_to_missed_summons(self, missed_ids_list, master_json):
         print("\nReplying to missed summons!\n")
+        print("\nAdding {} missed comment to master log..\n".format(len(missed_ids_list)))
         for cid in missed_ids_list:
             comment = self.reddit.comment(id=cid)
             parse_dict = self.build_parse_dict(comment)
             data = self.parse_command_syntax(parse_dict, comment)
             self.scrape_metadata_and_reply(parse_dict, data, comment)
+            master_json['comment_ids'].append(cid)
+            self.write_master_comment_log(master_json)
             return
 
     @staticmethod
@@ -192,12 +196,11 @@ class HotLinkBot(Thread):
 
                 else:
                     if len(missed_summons) != 0:
-                        self.reply_to_missed_summons(missed_summons)
+                        self.reply_to_missed_summons(missed_summons, master_log)
                         for cid in missed_summons:
                             master_log['comment_ids'].append(cid)
-                    self.write_master_comment_log(master_log)
             except prawcore.exceptions.RequestException:
-                print("\nNetwork exception occurred, waiting 10 seconds to retry..\n")
+                print("\nNetwork exception occurred at {}, waiting 10 seconds to retry..\n".format(time.ctime()))
                 time.sleep(10)
                 continue
 
@@ -212,10 +215,16 @@ class HotLinkBot(Thread):
                         data = self.parse_command_syntax(parse_dict, comment)
                         if data is None:
                             self.reply_with_error(0, comment, parse_dict)
+                        elif data == -1:
+                            self.reply_with_error(1, comment, parse_dict)
                         else:
                             self.scrape_metadata_and_reply(parse_dict, data, comment)
+                        master_log = self.read_master_comment_log()
+                        print("\nCurrent log length is {}\n".format(len(master_log['comment_ids'])))
+                        master_log['comment_ids'].append(comment.id)
+                        self.write_master_comment_log(master_log)
             except prawcore.exceptions.RequestException:
-                print("\nNetwork exception occurred, waiting 10 seconds to retry..\n")
+                print("\nNetwork exception occurred at {}, waiting 10 seconds to retry..\n".format(time.ctime()))
                 time.sleep(10)
 
     @staticmethod
@@ -248,6 +257,8 @@ class HotLinkBot(Thread):
             ref_link = w.fetch_ref_link()
             try:
                 source_links = w.build_source_link_list(ref_link)
+                if source_links == -1:
+                    return -1
                 hotlinks = w.scrape_hotlinks(source_links)
 
                 if len(hotlinks) == 0:
@@ -257,13 +268,13 @@ class HotLinkBot(Thread):
                     media_url = va.assemble_media_url(search)
                     dl_page = va.scrape_final_links(media_url, True)
                     if dl_page is None:
-                        self.reply_with_error(0, comment, parse_dict)
                         return
                     return [0, dl_page]
                 else:
                     return [1, hotlinks]
             except requests.exceptions.MissingSchema:
                 self.reply_with_error(0, comment, parse_dict)
+                return
 
         if parse_dict['media'] == "movie":
             print("\nTrying SimpleMovieApi...\n")
@@ -279,11 +290,9 @@ class HotLinkBot(Thread):
                     media_url = va.assemble_media_url(search)
                     dl_page = va.scrape_final_links(media_url, True)
                     if dl_page is None:
-                        self.reply_with_error(0, comment, parse_dict)
                         return
                     return [0, dl_page]
                 except TypeError:
-                    self.reply_with_error(0, comment, parse_dict)
                     return
 
         if parse_dict['media'] == "live":
@@ -300,7 +309,7 @@ class HotLinkBot(Thread):
     def assemble_tvod_reply_entry(self, title, season, episode, link, size, link_type):
         if link_type == 1:
             for l, s in zip(link, size):
-                if l not in self.reply_entries and "http" in l:
+                if l not in self.reply_entries and "http" in l and "mp4" in l:
                     s = int(s) / 1000
                     self.reply_entries.append('\n| {} | {} | {} | {} | {} |'.format(
                         title, season, episode, "[mp4 hotlink]({})".format(l), "{}mb".format(str(s))))

@@ -113,7 +113,8 @@ class WatchEpisodeApi(object):
         bsoup = Soup(requests.get("{}/{}".format(self.root_url, title)).text, 'html.parser')
         for a in bsoup.findAll("a"):
             try:
-                if "person" not in a['href'] and "profile" not in a['href'] and self.formatted_search.lower() in a['href']:
+                if "person" not in a['href'] and "profile" not in a['href'] and self.formatted_search.lower() in \
+                        a['href']:
                     return a['href']
             except KeyError:
                 continue
@@ -131,11 +132,19 @@ class WatchEpisodeApi(object):
         source_links = []
         print("\nFinding source links...\n")
         bar = tqdm(total=len(link_list))
-        for link in link_list:
-            bsoup2 = Soup(requests.get(link).text, 'html.parser')
-            source_links.append(bsoup2.find("a", {"class": "detail-w-button act_watchlink2"})['data-actuallink'])
-            bar.update(1)
-        return source_links
+        try:
+            for link in link_list:
+                bar.update(1)
+                bsoup2 = Soup(requests.get(link).text, 'html.parser')
+                actual_link = bsoup2.find("a", {"class": "detail-w-button act_watchlink2"})['data-actuallink']
+                if "clipwatching" in actual_link and actual_link not in source_links or "videobin" in actual_link \
+                        and actual_link not in source_links:
+                    source_links.append(actual_link)
+                else:
+                    continue
+            return source_links
+        except TypeError:
+            return -1
 
     @staticmethod
     def scrape_hotlinks(source_links):
@@ -143,17 +152,18 @@ class WatchEpisodeApi(object):
         print("\nFinding hotlinks...\n")
         bar = tqdm(total=len(source_links))
         for link in source_links:
+            bsoup = Soup(requests.get(link).text, 'html.parser')
             if "clipwatching" in link:
-                bsoup = Soup(requests.get(link).text, 'html.parser')
                 for s in bsoup.findAll("script"):
-                    if "#hola" in str(s) and "player" in str(s):
-                        if str(s).split("sources: [{src: ")[1].split(",")[0].strip("\"") not in hotlinks:
-                            hotlinks.append(str(s).split("sources: [{src: ")[1].split(",")[0].strip("\""))
-
-                bar.update(1)
-
-            else:
-                continue
+                    if "#hola" in s.text and "player" in s.text:
+                        if s.text.split("sources: [{src: ")[1].split(",")[0].strip("\"") not in hotlinks:
+                            hotlinks.append(s.text.split("sources: [{src: ")[1].split(",")[0].strip("\""))
+            if "videobin" in link:
+                for s in bsoup.findAll("script"):
+                    if 'var player = new Clappr.Player({' in s.text:
+                        if s.text.split('[')[1].split(',"')[1].split('"]')[0] not in hotlinks:
+                            hotlinks.append(s.text.split('[')[1].split(',"')[1].split('"]')[0])
+            bar.update(1)
         return hotlinks
 
 
